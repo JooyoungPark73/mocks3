@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package proto;
+
+option go_package = "./mocks3";
+
+service FileService {
+    rpc GetFile (FileSize) returns (FileBlob) {}
+    rpc PutFile (FileBlob) returns (FileSize) {}
+}
+
+message FileSize {
+    int64 size = 1;
+}
+
+message FileBlob {
+    bytes blob = 1;
+}
