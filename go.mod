@@ -1,8 +1,9 @@
 module mocks3
 
-go 1.17
+go 1.19
 
 require (
+	github.com/sirupsen/logrus v1.9.3
 	google.golang.org/grpc v1.59.0
 	google.golang.org/protobuf v1.31.0
 )

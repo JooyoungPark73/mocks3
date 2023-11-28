@@ -4,9 +4,12 @@ import (
 	"context"
 	"crypto/rand"
 	"flag"
-	"log"
+	"math"
 	"net"
+	"os"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 
 	pb "mocks3/proto"
 
@@ -18,40 +21,80 @@ type server struct {
 }
 
 var (
-	port = flag.String("port", ":50051", "the port to listen on")
+	port      = flag.String("port", ":50051", "the port to listen on")
+	verbosity = flag.String("verbosity", "info", "Logging verbosity - choose from [info, debug, trace]")
 )
 
 func (s *server) GetTimeToSleep(fileSize int64) time.Duration {
-	// Wait based on file size
-	return time.Duration(fileSize) * time.Millisecond
+	// Sourced from: https://github.com/vhive-serverless/MockS3/blob/main/mocks3/mock_io_functions.py
+	numBytestoKBLog := math.Log10(float64(fileSize) / 1024)
+	latencyPower := math.Pow(math.E, 0.0429*numBytestoKBLog) * 2.1114
+	sleepTime := time.Duration(math.Pow(10, latencyPower)) * time.Millisecond
+	return sleepTime
 }
 
 func (s *server) GetFile(ctx context.Context, in *pb.FileSize) (*pb.FileBlob, error) {
 	// Wait based on file size
-	log.Printf("Received a file size: %d", in.GetSize())
-	time.Sleep(s.GetTimeToSleep(in.GetSize()))
+	arrivalTime := time.Now().UnixMilli()
+
 	// Generate random blob
 	blob := make([]byte, in.GetSize())
 	rand.Read(blob)
-	return &pb.FileBlob{Blob: blob}, nil
+
+	timeToSleep := s.GetTimeToSleep(in.GetSize())
+	log.Infof("Received a file blob of size: %d KB, sleeping for %v", in.GetSize()/1024, timeToSleep)
+	sleepTime := timeToSleep - time.Duration(time.Now().UnixMilli()-arrivalTime)*time.Millisecond
+	log.Info("Net Sleeping for ", sleepTime)
+	time.Sleep(sleepTime)
+
+	return &pb.FileBlob{Blob: blob, CreationTime: sleepTime.Milliseconds()}, nil
 }
 
 func (s *server) PutFile(ctx context.Context, in *pb.FileBlob) (*pb.FileSize, error) {
 	// Wait
-	log.Printf("Received a file blob of size: %d", len(in.GetBlob()))
+	arrivalTime := time.Now().UnixMilli()
 	size := int64(len(in.GetBlob()))
-	time.Sleep(s.GetTimeToSleep(size)) // predefined wait time
+
+	timeToSleep := s.GetTimeToSleep(size)
+	log.Infof("Received a file blob of size: %d KB, sleeping for %v", size/1024, timeToSleep)
+	sleepTime := timeToSleep - time.Duration(in.GetCreationTime())*time.Millisecond - time.Duration(time.Now().UnixMilli()-arrivalTime)*time.Millisecond
+	log.Info("Net Sleeping for ", sleepTime)
+	time.Sleep(sleepTime)
+
 	return &pb.FileSize{Size: size}, nil
 }
 
+func init() {
+	flag.Parse()
+
+	log.SetFormatter(&log.TextFormatter{
+		TimestampFormat: time.StampMilli,
+		FullTimestamp:   true,
+	})
+	log.SetOutput(os.Stdout)
+
+	switch *verbosity {
+	case "debug":
+		log.SetLevel(log.DebugLevel)
+	case "trace":
+		log.SetLevel(log.TraceLevel)
+	default:
+		log.SetLevel(log.InfoLevel)
+	}
+}
+
 func main() {
+	maxMsgSize := int(math.Pow(2, 30)) // 1GB
 	lis, err := net.Listen("tcp", *port)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
-	s := grpc.NewServer()
+	s := grpc.NewServer(
+		grpc.MaxRecvMsgSize(maxMsgSize),
+		grpc.MaxSendMsgSize(maxMsgSize),
+	)
 	pb.RegisterFileServiceServer(s, &server{})
-	log.Printf("server listening at %v", lis.Addr())
+	log.Infof("server listening at %v", lis.Addr())
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)
 	}
