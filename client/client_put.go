@@ -8,6 +8,7 @@ import (
 	"math"
 	"os"
 	"strconv"
+	"sync"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -42,6 +43,11 @@ func init() {
 	}
 }
 
+func fillWithRandomData(slice []byte, wg *sync.WaitGroup) {
+	defer wg.Done()
+	crand.Read(slice) // Fill the slice with random data
+}
+
 func ClientPut(size int64) int64 {
 	// Set up a connection to the server.
 	maxMsgSize := int(math.Pow(2, 30)) // 1GB
@@ -58,7 +64,27 @@ func ClientPut(size int64) int64 {
 
 	sendTime := time.Now().UnixMilli()
 	blob := make([]byte, size)
-	crand.Read(blob)
+	if size < 50000000 {
+		crand.Read(blob)
+	} else {
+		const numGoroutines = 10
+
+		var wg sync.WaitGroup
+		chunkSize := size / numGoroutines
+
+		for i := 0; i < numGoroutines; i++ {
+			start := int64(i) * chunkSize
+			end := start + chunkSize
+			if i == numGoroutines-1 {
+				end = size // Ensure the last chunk covers the rest of the slice
+			}
+
+			wg.Add(1)
+			go fillWithRandomData(blob[start:end], &wg)
+		}
+		wg.Wait()
+	}
+
 	log.Info("Creation Time: ", time.Now().UnixMilli()-sendTime)
 	r2, err := c.PutFile(ctx, &pb.FileBlob{Blob: blob, CreationTime: time.Now().UnixMilli() - sendTime})
 	e2eTime := time.Now().UnixMilli() - sendTime

@@ -7,6 +7,7 @@ import (
 	"math"
 	"net"
 	"os"
+	"sync"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -33,12 +34,37 @@ func (s *server) GetTimeToSleep(fileSize int64) time.Duration {
 	return sleepTime
 }
 
+func fillWithRandomData(slice []byte, wg *sync.WaitGroup) {
+	defer wg.Done()
+	rand.Read(slice) // Fill the slice with random data
+}
+
 func (s *server) GetFile(ctx context.Context, in *pb.FileSize) (*pb.FileBlob, error) {
 	// Wait based on file size
 	arrivalTime := time.Now().UnixMilli()
 
 	// Generate random blob
 	blob := make([]byte, in.GetSize())
+	if in.GetSize() < 50000000 {
+		rand.Read(blob)
+	} else {
+		const numGoroutines = 10
+
+		var wg sync.WaitGroup
+		chunkSize := in.GetSize() / numGoroutines
+
+		for i := 0; i < numGoroutines; i++ {
+			start := int64(i) * chunkSize
+			end := start + chunkSize
+			if i == numGoroutines-1 {
+				end = in.GetSize() // Ensure the last chunk covers the rest of the slice
+			}
+
+			wg.Add(1)
+			go fillWithRandomData(blob[start:end], &wg)
+		}
+		wg.Wait()
+	}
 	rand.Read(blob)
 
 	timeToSleep := s.GetTimeToSleep(in.GetSize())
