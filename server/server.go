@@ -21,7 +21,7 @@ type server struct {
 }
 
 var (
-	port      = flag.String("port", ":50051", "the port to listen on")
+	port      = flag.String("port", "50051", "the port to listen on")
 	verbosity = flag.String("verbosity", "info", "Logging verbosity - choose from [info, debug, trace]")
 )
 
@@ -85,7 +85,7 @@ func init() {
 
 func main() {
 	maxMsgSize := int(math.Pow(2, 30)) // 1GB
-	lis, err := net.Listen("tcp", *port)
+	lis, err := net.Listen("tcp", ":"+*port)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
