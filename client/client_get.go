@@ -42,7 +42,7 @@ func init() {
 	}
 }
 
-func ClientGet(size int64) (int64, int64, int64, int64) {
+func ClientGet(size int64) (int64, int64, int64, int64, int64) {
 	// Set up a connection to the server.
 	sendTime := time.Now().UnixMilli()
 	maxMsgSize := int(math.Pow(2, 29)) // 512MB
@@ -69,8 +69,12 @@ func ClientGet(size int64) (int64, int64, int64, int64) {
 	log.Debugf("Received a file blob of size: %d", len(r1.GetBlob()))
 	creationTime := r1.GetCreationTime()
 	expectedLatency := r1.GetExpectedLatency()
+	sleepTime := r1.GetSleepTime()
 	commTime := e2eTime - creationTime
-	return e2eTime, expectedLatency, commTime, creationTime
+	if sleepTime > 0 {
+		commTime = commTime - sleepTime
+	}
+	return e2eTime, expectedLatency, commTime, creationTime, sleepTime
 }
 
 func BenchmarkClientGet() {
@@ -81,16 +85,16 @@ func BenchmarkClientGet() {
 	}
 	csvwriter := csv.NewWriter(csvFile)
 	defer csvwriter.Flush()
-	err = csvwriter.Write([]string{"Payload Size (Bytes)", "E2E Time (ms)", "Expected Latency (ms)", "Comm Time (ms)", "Creation Time (ms)"})
+	err = csvwriter.Write([]string{"Payload Size (Bytes)", "E2E Time (ms)", "Expected Latency (ms)", "Comm Time (ms)", "Creation Time (ms)", "Sleep Time (ms)"})
 	if err != nil {
 		log.Fatalf("could not write to CSV file: %v", err)
 	}
 
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 10; i++ {
 		randNumber := rand.Float64() * 29
 		payloadSize := int64(math.Pow(2, randNumber))
-		e2eTime, expectedLatency, commTime, creationTime := ClientGet(payloadSize)
-		err := csvwriter.Write([]string{strconv.FormatInt(payloadSize, 10), strconv.FormatInt(e2eTime, 10), strconv.FormatInt(expectedLatency, 10), strconv.FormatInt(commTime, 10), strconv.FormatInt(creationTime, 10)})
+		e2eTime, expectedLatency, commTime, creationTime, sleepTime := ClientGet(payloadSize)
+		err := csvwriter.Write([]string{strconv.FormatInt(payloadSize, 10), strconv.FormatInt(e2eTime, 10), strconv.FormatInt(expectedLatency, 10), strconv.FormatInt(commTime, 10), strconv.FormatInt(creationTime, 10), strconv.FormatInt(sleepTime, 10)})
 		if err != nil {
 			log.Fatalf("could not write to CSV file: %v", err)
 		}

@@ -49,7 +49,7 @@ func fillWithRandomData(slice []byte, wg *sync.WaitGroup) {
 	crand.Read(slice) // Fill the slice with random data
 }
 
-func ClientPut(size int64) (int64, int64, int64, int64) {
+func ClientPut(size int64) (int64, int64, int64, int64, int64) {
 	// Set up a connection to the server.
 	sendTime := time.Now().UnixMilli()
 	maxMsgSize := int(math.Pow(2, 29)) // 1GB
@@ -80,7 +80,7 @@ func ClientPut(size int64) (int64, int64, int64, int64) {
 		}
 	}
 	creationTime := time.Now().UnixMilli() - sendTime
-	log.Debugf("Creation Time: ", creationTime)
+	log.Debugf("Creation Time: %d ms", creationTime)
 	r2, err := c.PutFile(ctx, &pb.FileBlob{Blob: blob, CreationTime: time.Now().UnixMilli() - sendTime})
 	e2eTime := time.Now().UnixMilli() - sendTime
 	if err != nil {
@@ -89,8 +89,12 @@ func ClientPut(size int64) (int64, int64, int64, int64) {
 	log.Debugf("Sent a blob, received size: %d", r2.GetSize())
 
 	expectedLatency := r2.GetExpectedLatency()
+	sleepTime := r2.GetSleepTime()
 	commTime := e2eTime - creationTime
-	return e2eTime, expectedLatency, commTime, creationTime
+	if sleepTime > 0 {
+		commTime = commTime - sleepTime
+	}
+	return e2eTime, expectedLatency, commTime, creationTime, sleepTime
 }
 
 func BenchmarkClientPut() {
@@ -101,7 +105,7 @@ func BenchmarkClientPut() {
 	}
 	csvwriter := csv.NewWriter(csvFile)
 	defer csvwriter.Flush()
-	err = csvwriter.Write([]string{"Payload Size (Bytes)", "E2E Time (ms)", "Expected Latency (ms)", "Comm Time (ms)", "Creation Time (ms)"})
+	err = csvwriter.Write([]string{"Payload Size (Bytes)", "E2E Time (ms)", "Expected Latency (ms)", "Comm Time (ms)", "Creation Time (ms)", "Sleep Time (ms)"})
 	if err != nil {
 		log.Fatalf("could not write to CSV file: %v", err)
 	}
@@ -109,8 +113,8 @@ func BenchmarkClientPut() {
 	for i := 0; i < 1000; i++ {
 		randNumber := rand.Float64() * 29
 		payloadSize := int64(math.Pow(2, randNumber))
-		e2eTime, expectedLatency, commTime, creationTime := ClientPut(payloadSize)
-		err := csvwriter.Write([]string{strconv.FormatInt(payloadSize, 10), strconv.FormatInt(e2eTime, 10), strconv.FormatInt(expectedLatency, 10), strconv.FormatInt(commTime, 10), strconv.FormatInt(creationTime, 10)})
+		e2eTime, expectedLatency, commTime, creationTime, sleepTime := ClientPut(payloadSize)
+		err := csvwriter.Write([]string{strconv.FormatInt(payloadSize, 10), strconv.FormatInt(e2eTime, 10), strconv.FormatInt(expectedLatency, 10), strconv.FormatInt(commTime, 10), strconv.FormatInt(creationTime, 10), strconv.FormatInt(sleepTime, 10)})
 		if err != nil {
 			log.Fatalf("could not write to CSV file: %v", err)
 		}

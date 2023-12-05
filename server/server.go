@@ -52,17 +52,18 @@ func (s *server) GetFile(ctx context.Context, in *pb.FileSize) (*pb.FileBlob, er
 	blob := buffer[:size]
 	creationTime := time.Duration(time.Now().UnixMilli()-arrivalTime) * time.Millisecond
 	timeToSleep := 0 * time.Millisecond
+	sleepTime := 0 * time.Millisecond
 
 	if *latency == "true" {
 		timeToSleep = s.GetTimeToSleep("GET", size)
 		log.Debugf("Sleeping for %v", timeToSleep)
 		creationTime = time.Duration(time.Now().UnixMilli()-arrivalTime) * time.Millisecond
-		sleepTime := timeToSleep - creationTime
+		sleepTime = timeToSleep - creationTime
 		log.Debug("Time to Sleep: ", timeToSleep, " Creation Time:", creationTime, " Net Sleeping for ", sleepTime)
 		time.Sleep(sleepTime)
 	}
 
-	return &pb.FileBlob{Blob: blob, ExpectedLatency: timeToSleep.Milliseconds(), CreationTime: creationTime.Milliseconds()}, nil
+	return &pb.FileBlob{Blob: blob, ExpectedLatency: timeToSleep.Milliseconds(), SleepTime: sleepTime.Milliseconds(), CreationTime: creationTime.Milliseconds()}, nil
 }
 
 func (s *server) PutFile(ctx context.Context, in *pb.FileBlob) (*pb.FileSize, error) {
@@ -71,16 +72,17 @@ func (s *server) PutFile(ctx context.Context, in *pb.FileBlob) (*pb.FileSize, er
 	size := int64(len(in.GetBlob()))
 	log.Debugf("Received a file blob of size: %f KB", float64(size)/1024)
 	timeToSleep := 0 * time.Millisecond
+	sleepTime := 0 * time.Millisecond
 
 	if *latency == "true" {
 		timeToSleep = s.GetTimeToSleep("PUT", size)
 		log.Debugf("sleeping for %v", timeToSleep)
-		sleepTime := timeToSleep - time.Duration(in.GetCreationTime())*time.Millisecond - time.Duration(time.Now().UnixMilli()-arrivalTime)*time.Millisecond
+		sleepTime = timeToSleep - time.Duration(in.GetCreationTime())*time.Millisecond - time.Duration(time.Now().UnixMilli()-arrivalTime)*time.Millisecond
 		log.Debug("Time to Sleep: ", timeToSleep, " Net Sleeping for ", sleepTime)
 		time.Sleep(sleepTime)
 	}
 
-	return &pb.FileSize{Size: size, ExpectedLatency: timeToSleep.Milliseconds()}, nil
+	return &pb.FileSize{Size: size, ExpectedLatency: timeToSleep.Milliseconds(), SleepTime: sleepTime.Milliseconds()}, nil
 }
 
 func init() {
