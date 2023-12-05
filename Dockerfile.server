@@ -27,6 +27,8 @@ FROM debian:stable-slim
 
 ARG FUNC_PORT
 ENV FUNC_PORT_ENV=${FUNC_PORT}
+ARG FUNC_LATENCY
+ENV FUNC_LATENCY_ENV=${FUNC_LATENCY}
 
 EXPOSE ${FUNC_PORT_ENV}
 
@@ -34,4 +36,4 @@ EXPOSE ${FUNC_PORT_ENV}
 COPY --from=BUILDER /app/server/server /server
 
 # Run the web service on container startup.
-CMD /server --port ${FUNC_PORT_ENV}
+CMD /server --port ${FUNC_PORT_ENV} --latency ${FUNC_LATENCY_ENV}

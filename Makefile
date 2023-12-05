@@ -2,13 +2,14 @@
 
 build:
 	docker build \
-		--build-arg FUNC_PORT=50051 \
+		--build-arg FUNC_PORT=30000 \
+		--build-arg FUNC_LATENCY=true \
 		-f Dockerfile.server \
 		-t nehalem90/mocks3_server .
 		docker push nehalem90/mocks3_server:latest
 
 run:
-	docker run -p 50051:50051 nehalem90/mocks3_server
+	docker run -p 30000:30000 nehalem90/mocks3_server
 
 proto:
 	protoc \

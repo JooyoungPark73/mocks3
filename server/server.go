@@ -7,7 +7,6 @@ import (
 	"math"
 	"net"
 	"os"
-	"sync"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -22,21 +21,25 @@ type server struct {
 }
 
 var (
-	port      = flag.String("port", "50051", "the port to listen on")
+	port      = flag.String("port", "30000", "the port to listen on")
 	verbosity = flag.String("verbosity", "info", "Logging verbosity - choose from [info, debug, trace]")
+	latency   = flag.String("latency", "true", "Whether to have latency, true by default")
+	buffer    = make([]byte, 512*1024*1024) // 512MB
 )
 
-func (s *server) GetTimeToSleep(fileSize int64) time.Duration {
+func (s *server) GetTimeToSleep(commType string, fileSize int64) time.Duration {
 	// Sourced from: https://github.com/vhive-serverless/MockS3/blob/main/mocks3/mock_io_functions.py
 	numBytestoKBLog := math.Log10(float64(fileSize) / 1024)
-	latencyPower := math.Pow(math.E, 0.0429*numBytestoKBLog) * 2.1114
-	sleepTime := time.Duration(math.Pow(10, latencyPower)) * time.Millisecond
+	latencyPower := math.Pow(10, math.Pow(math.E, 0.0429*numBytestoKBLog)*2.1114)
+	if commType == "GET" {
+		latencyPower = latencyPower * 0.67
+	} else if commType == "PUT" {
+		latencyPower = latencyPower * 1.33
+	} else {
+		log.Panic("Invalid communication type")
+	}
+	sleepTime := time.Duration(latencyPower) * time.Millisecond
 	return sleepTime
-}
-
-func fillWithRandomData(slice []byte, wg *sync.WaitGroup) {
-	defer wg.Done()
-	rand.Read(slice) // Fill the slice with random data
 }
 
 func (s *server) GetFile(ctx context.Context, in *pb.FileSize) (*pb.FileBlob, error) {
@@ -44,54 +47,50 @@ func (s *server) GetFile(ctx context.Context, in *pb.FileSize) (*pb.FileBlob, er
 	arrivalTime := time.Now().UnixMilli()
 
 	// Generate random blob
-	blob := make([]byte, in.GetSize())
-	if in.GetSize() < 50000000 {
-		rand.Read(blob)
-	} else {
-		const numGoroutines = 10
+	size := in.GetSize()
+	log.Debugf("Received a request for blob of size: %f KB", float64(size)/1024)
+	blob := buffer[:size]
+	creationTime := time.Duration(time.Now().UnixMilli()-arrivalTime) * time.Millisecond
+	timeToSleep := 0 * time.Millisecond
 
-		var wg sync.WaitGroup
-		chunkSize := in.GetSize() / numGoroutines
-
-		for i := 0; i < numGoroutines; i++ {
-			start := int64(i) * chunkSize
-			end := start + chunkSize
-			if i == numGoroutines-1 {
-				end = in.GetSize() // Ensure the last chunk covers the rest of the slice
-			}
-
-			wg.Add(1)
-			go fillWithRandomData(blob[start:end], &wg)
-		}
-		wg.Wait()
+	if *latency == "true" {
+		timeToSleep = s.GetTimeToSleep("GET", size)
+		log.Debugf("Sleeping for %v", timeToSleep)
+		creationTime = time.Duration(time.Now().UnixMilli()-arrivalTime) * time.Millisecond
+		sleepTime := timeToSleep - creationTime
+		log.Debug("Time to Sleep: ", timeToSleep, " Creation Time:", creationTime, " Net Sleeping for ", sleepTime)
+		time.Sleep(sleepTime)
 	}
-	rand.Read(blob)
 
-	timeToSleep := s.GetTimeToSleep(in.GetSize())
-	log.Infof("Received a file blob of size: %d KB, sleeping for %v", in.GetSize()/1024, timeToSleep)
-	sleepTime := timeToSleep - time.Duration(time.Now().UnixMilli()-arrivalTime)*time.Millisecond
-	log.Info("Net Sleeping for ", sleepTime)
-	time.Sleep(sleepTime)
-
-	return &pb.FileBlob{Blob: blob, CreationTime: sleepTime.Milliseconds()}, nil
+	return &pb.FileBlob{Blob: blob, ExpectedLatency: timeToSleep.Milliseconds(), CreationTime: creationTime.Milliseconds()}, nil
 }
 
 func (s *server) PutFile(ctx context.Context, in *pb.FileBlob) (*pb.FileSize, error) {
 	// Wait
 	arrivalTime := time.Now().UnixMilli()
 	size := int64(len(in.GetBlob()))
+	log.Debugf("Received a file blob of size: %f KB", float64(size)/1024)
+	timeToSleep := 0 * time.Millisecond
 
-	timeToSleep := s.GetTimeToSleep(size)
-	log.Infof("Received a file blob of size: %d KB, sleeping for %v", size/1024, timeToSleep)
-	sleepTime := timeToSleep - time.Duration(in.GetCreationTime())*time.Millisecond - time.Duration(time.Now().UnixMilli()-arrivalTime)*time.Millisecond
-	log.Info("Net Sleeping for ", sleepTime)
-	time.Sleep(sleepTime)
+	if *latency == "true" {
+		timeToSleep = s.GetTimeToSleep("PUT", size)
+		log.Debugf("sleeping for %v", timeToSleep)
+		sleepTime := timeToSleep - time.Duration(in.GetCreationTime())*time.Millisecond - time.Duration(time.Now().UnixMilli()-arrivalTime)*time.Millisecond
+		log.Debug("Time to Sleep: ", timeToSleep, " Net Sleeping for ", sleepTime)
+		time.Sleep(sleepTime)
+	}
 
-	return &pb.FileSize{Size: size}, nil
+	return &pb.FileSize{Size: size, ExpectedLatency: timeToSleep.Milliseconds()}, nil
 }
 
 func init() {
 	flag.Parse()
+
+	if *latency == "true" {
+		log.Info("Latency is enabled")
+	} else {
+		log.Info("Latency is disabled")
+	}
 
 	log.SetFormatter(&log.TextFormatter{
 		TimestampFormat: time.StampMilli,
@@ -107,10 +106,11 @@ func init() {
 	default:
 		log.SetLevel(log.InfoLevel)
 	}
+	rand.Read(buffer)
 }
 
 func main() {
-	maxMsgSize := int(math.Pow(2, 30)) // 1GB
+	maxMsgSize := int(math.Pow(2, 29)) // 512MB
 	lis, err := net.Listen("tcp", ":"+*port)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
@@ -124,4 +124,5 @@ func main() {
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)
 	}
+
 }

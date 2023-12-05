@@ -5,6 +5,7 @@ import (
 	"encoding/csv"
 	"flag"
 	"math"
+	"math/rand"
 	"os"
 	"strconv"
 	"time"
@@ -18,7 +19,7 @@ import (
 )
 
 var (
-	addr      = flag.String("addr", "localhost:50051", "the address to connect to")
+	addr      = flag.String("addr", "localhost:30000", "the address to connect to")
 	verbosity = flag.String("verbosity", "info", "Logging verbosity - choose from [info, debug, trace]")
 )
 
@@ -41,9 +42,10 @@ func init() {
 	}
 }
 
-func ClientGet(size int64) int64 {
+func ClientGet(size int64) (int64, int64, int64, int64) {
 	// Set up a connection to the server.
-	maxMsgSize := int(math.Pow(2, 30)) // 1GB
+	sendTime := time.Now().UnixMilli()
+	maxMsgSize := int(math.Pow(2, 29)) // 512MB
 	conn, err := grpc.Dial(*addr, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(maxMsgSize), grpc.MaxCallSendMsgSize(maxMsgSize)))
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
@@ -54,8 +56,7 @@ func ClientGet(size int64) int64 {
 	// Contact the server and print out its response.
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	sendTime := time.Now().UnixMilli()
-	r1, err := c.GetFile(ctx, &pb.FileSize{Size: size})
+	r1, err := c.GetFile(ctx, &pb.FileSize{Size: size, ExpectedLatency: 0})
 	e2eTime := time.Now().UnixMilli() - sendTime
 	if err != nil {
 		if err == context.DeadlineExceeded {
@@ -66,7 +67,10 @@ func ClientGet(size int64) int64 {
 		}
 	}
 	log.Debugf("Received a file blob of size: %d", len(r1.GetBlob()))
-	return e2eTime
+	creationTime := r1.GetCreationTime()
+	expectedLatency := r1.GetExpectedLatency()
+	commTime := e2eTime - creationTime
+	return e2eTime, expectedLatency, commTime, creationTime
 }
 
 func BenchmarkClientGet() {
@@ -77,16 +81,20 @@ func BenchmarkClientGet() {
 	}
 	csvwriter := csv.NewWriter(csvFile)
 	defer csvwriter.Flush()
+	err = csvwriter.Write([]string{"Payload Size (Bytes)", "E2E Time (ms)", "Expected Latency (ms)", "Comm Time (ms)", "Creation Time (ms)"})
+	if err != nil {
+		log.Fatalf("could not write to CSV file: %v", err)
+	}
 
-	e2eTime := int64(0)
-	for i := 1; i < int(math.Pow(2, 30)); i = i * 2 {
-		e2eTime = ClientGet(int64(i)) // For example, test with a blob size of 1024 bytes
-		err := csvwriter.Write([]string{strconv.FormatInt(int64(i), 10), strconv.FormatInt(e2eTime, 10)})
+	for i := 0; i < 1000; i++ {
+		randNumber := rand.Float64() * 29
+		payloadSize := int64(math.Pow(2, randNumber))
+		e2eTime, expectedLatency, commTime, creationTime := ClientGet(payloadSize)
+		err := csvwriter.Write([]string{strconv.FormatInt(payloadSize, 10), strconv.FormatInt(e2eTime, 10), strconv.FormatInt(expectedLatency, 10), strconv.FormatInt(commTime, 10), strconv.FormatInt(creationTime, 10)})
 		if err != nil {
 			log.Fatalf("could not write to CSV file: %v", err)
 		}
 		csvwriter.Flush()
-
 	}
 	csvFile.Close()
 	// Teardown any resources
