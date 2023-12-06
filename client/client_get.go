@@ -90,7 +90,7 @@ func BenchmarkClientGet() {
 		log.Fatalf("could not write to CSV file: %v", err)
 	}
 
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 1000; i++ {
 		randNumber := rand.Float64() * 29
 		payloadSize := int64(math.Pow(2, randNumber))
 		e2eTime, expectedLatency, commTime, creationTime, sleepTime := ClientGet(payloadSize)

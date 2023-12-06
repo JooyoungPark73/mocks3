@@ -29,8 +29,11 @@ var (
 
 func (s *server) GetTimeToSleep(commType string, fileSize int64) time.Duration {
 	// Sourced from: https://github.com/vhive-serverless/MockS3/blob/main/mocks3/mock_io_functions.py
-	numBytestoKBLog := math.Log10(float64(fileSize) / 1024)
-	latencyPower := math.Pow(10, math.Pow(math.E, 0.0429*numBytestoKBLog)*2.1114)
+	// [  0.12018868   1.11999534 111.24820149]
+	// a * np.exp(b * np.log10(x_point)) + c
+
+	latencyPower := 0.12018868*math.Exp(1.11999534*math.Log10(float64(fileSize))) + 111.24820149
+
 	if commType == "GET" {
 		latencyPower = latencyPower * 0.67
 	} else if commType == "PUT" {
@@ -59,7 +62,7 @@ func (s *server) GetFile(ctx context.Context, in *pb.FileSize) (*pb.FileBlob, er
 		log.Debugf("Sleeping for %v", timeToSleep)
 		creationTime = time.Duration(time.Now().UnixMilli()-arrivalTime) * time.Millisecond
 		sleepTime = timeToSleep - creationTime
-		log.Debug("Time to Sleep: ", timeToSleep, " Creation Time:", creationTime, " Net Sleeping for ", sleepTime)
+		log.Debugf("Creation Time : %v, Net Sleeping for %v", creationTime, sleepTime)
 		time.Sleep(sleepTime)
 	}
 
@@ -78,7 +81,7 @@ func (s *server) PutFile(ctx context.Context, in *pb.FileBlob) (*pb.FileSize, er
 		timeToSleep = s.GetTimeToSleep("PUT", size)
 		log.Debugf("sleeping for %v", timeToSleep)
 		sleepTime = timeToSleep - time.Duration(in.GetCreationTime())*time.Millisecond - time.Duration(time.Now().UnixMilli()-arrivalTime)*time.Millisecond
-		log.Debug("Time to Sleep: ", timeToSleep, " Net Sleeping for ", sleepTime)
+		log.Debugf("Net Sleeping for %v", sleepTime)
 		time.Sleep(sleepTime)
 	}
 
