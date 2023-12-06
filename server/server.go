@@ -21,10 +21,11 @@ type server struct {
 }
 
 var (
-	port      = flag.String("port", "30000", "the port to listen on")
-	verbosity = flag.String("verbosity", "info", "Logging verbosity - choose from [info, debug, trace]")
-	latency   = flag.String("latency", "true", "Whether to have latency, true by default")
-	buffer    = make([]byte, 512*1024*1024) // 512MB
+	port            = flag.String("port", "30000", "the port to listen on")
+	verbosity       = flag.String("verbosity", "info", "Logging verbosity - choose from [info, debug, trace]")
+	latency         = flag.String("latency", "true", "Whether to have latency, true by default")
+	useCreationTime = flag.String("useCreationTime", "true", "Whether to use creation time, true by default")
+	buffer          = make([]byte, 512*1024*1024) // 512MB
 )
 
 func (s *server) GetTimeToSleep(commType string, fileSize int64) time.Duration {
@@ -60,8 +61,12 @@ func (s *server) GetFile(ctx context.Context, in *pb.FileSize) (*pb.FileBlob, er
 	if *latency == "true" {
 		timeToSleep = s.GetTimeToSleep("GET", size)
 		log.Debugf("Sleeping for %v", timeToSleep)
-		creationTime = time.Duration(time.Now().UnixMilli()-arrivalTime) * time.Millisecond
-		sleepTime = timeToSleep - creationTime
+		if *useCreationTime == "true" {
+			creationTime = time.Duration(time.Now().UnixMilli()-arrivalTime) * time.Millisecond
+			sleepTime = timeToSleep - creationTime
+		} else {
+			sleepTime = timeToSleep
+		}
 		log.Debugf("Creation Time : %v, Net Sleeping for %v", creationTime, sleepTime)
 		time.Sleep(sleepTime)
 	}
@@ -80,7 +85,12 @@ func (s *server) PutFile(ctx context.Context, in *pb.FileBlob) (*pb.FileSize, er
 	if *latency == "true" {
 		timeToSleep = s.GetTimeToSleep("PUT", size)
 		log.Debugf("sleeping for %v", timeToSleep)
-		sleepTime = timeToSleep - time.Duration(in.GetCreationTime())*time.Millisecond - time.Duration(time.Now().UnixMilli()-arrivalTime)*time.Millisecond
+		if *useCreationTime == "true" {
+			sleepTime = timeToSleep - time.Duration(in.GetCreationTime())*time.Millisecond - time.Duration(time.Now().UnixMilli()-arrivalTime)*time.Millisecond
+		} else {
+			sleepTime = timeToSleep
+		}
+
 		log.Debugf("Net Sleeping for %v", sleepTime)
 		time.Sleep(sleepTime)
 	}
