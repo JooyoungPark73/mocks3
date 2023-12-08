@@ -1,28 +1,22 @@
-package main
+package mocks3
 
 import (
 	"context"
-	crand "crypto/rand"
 	"encoding/csv"
 	"flag"
 	"math"
 	"math/rand"
 	"os"
 	"strconv"
-	"sync"
 	"time"
 
 	log "github.com/sirupsen/logrus"
 
-	pb "mocks3/proto"
+	pb "github.com/JooyoungPark73/mocks3/proto"
+	utils "github.com/JooyoungPark73/mocks3/utils"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-)
-
-var (
-	addr      = flag.String("addr", "localhost:30000", "the address to connect to")
-	verbosity = flag.String("verbosity", "info", "Logging verbosity - choose from [info, debug, trace]")
 )
 
 func init() {
@@ -34,7 +28,7 @@ func init() {
 	})
 	log.SetOutput(os.Stdout)
 
-	switch *verbosity {
+	switch *utils.Verbosity {
 	case "debug":
 		log.SetLevel(log.DebugLevel)
 	case "trace":
@@ -44,57 +38,40 @@ func init() {
 	}
 }
 
-func fillWithRandomData(slice []byte, wg *sync.WaitGroup) {
-	defer wg.Done()
-	crand.Read(slice) // Fill the slice with random data
-}
+func ClientPut(size int64) (int64, int64) {
+	sendTime := time.Now().UnixMicro()
+	targetTime := utils.GetTimeToSleep("GET", size)
 
-func ClientPut(size int64) (int64, int64, int64, int64, int64) {
-	// Set up a connection to the server.
-	sendTime := time.Now().UnixMilli()
+	// gRPC Connection
 	maxMsgSize := int(math.Pow(2, 29)) // 1GB
-	conn, err := grpc.Dial(*addr, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(maxMsgSize), grpc.MaxCallSendMsgSize(maxMsgSize)))
+	conn, err := grpc.Dial(*utils.Addr, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(maxMsgSize), grpc.MaxCallSendMsgSize(maxMsgSize)))
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
 	}
 	defer conn.Close()
 	c := pb.NewFileServiceClient(conn)
-
-	// Contact the server and print out its response.
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	// sendTime := time.Now().UnixMilli()
-	blob := make([]byte, size)
-	if size < 1024*1024 {
-		crand.Read(blob)
-	} else {
-		buffer := make([]byte, 1024*1024)
-		crand.Read(buffer)
+	// Generate a random blob
+	blob := utils.CreateRandomObject(size)
+	creationTime := time.Now().UnixMicro() - sendTime
+	log.Debugf("Creation Time: %d ms", creationTime/1000)
 
-		for remaining := size; remaining > 0; remaining -= int64(len(buffer)) {
-			if remaining < int64(len(buffer)) {
-				buffer = buffer[:remaining]
-			}
-			copy(blob[size-remaining:], buffer)
-		}
-	}
-	creationTime := time.Now().UnixMilli() - sendTime
-	log.Debugf("Creation Time: %d ms", creationTime)
-	r2, err := c.PutFile(ctx, &pb.FileBlob{Blob: blob, CreationTime: time.Now().UnixMilli() - sendTime})
-	e2eTime := time.Now().UnixMilli() - sendTime
+	// Send the blob
+	r, err := c.PutFile(ctx, &pb.FileBlob{Blob: blob})
+	commTime := time.Now().UnixMicro() - sendTime - creationTime
 	if err != nil {
 		log.Fatalf("could not get file size: %v", err)
 	}
-	log.Debugf("Sent a blob, received size: %d", r2.GetSize())
+	log.Debugf("Sent a blob, received size: %d", r.GetSize())
 
-	expectedLatency := r2.GetExpectedLatency()
-	sleepTime := r2.GetSleepTime()
-	commTime := e2eTime - creationTime
-	if sleepTime > 0 {
-		commTime = commTime - sleepTime
-	}
-	return e2eTime, expectedLatency, commTime, creationTime, sleepTime
+	timeToSleep := time.Duration(targetTime.Microseconds()-commTime-creationTime) * time.Microsecond
+	time.Sleep(timeToSleep)
+	log.Debugf("Time to sleep: %d ms, net sleep: %d ms", targetTime.Milliseconds(), timeToSleep.Milliseconds())
+	e2eTime := time.Now().UnixMicro() - sendTime
+
+	return e2eTime / 1000, targetTime.Milliseconds()
 }
 
 func BenchmarkClientPut() {
@@ -105,24 +82,20 @@ func BenchmarkClientPut() {
 	}
 	csvwriter := csv.NewWriter(csvFile)
 	defer csvwriter.Flush()
-	err = csvwriter.Write([]string{"Payload Size (Bytes)", "E2E Time (ms)", "Expected Latency (ms)", "Comm Time (ms)", "Creation Time (ms)", "Sleep Time (ms)"})
+	err = csvwriter.Write([]string{"Payload Size (Bytes)", "E2E Time (ms)", "Target Time (ms)"})
 	if err != nil {
 		log.Fatalf("could not write to CSV file: %v", err)
 	}
 
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 100; i++ {
 		randNumber := rand.Float64() * 29
 		payloadSize := int64(math.Pow(2, randNumber))
-		e2eTime, expectedLatency, commTime, creationTime, sleepTime := ClientPut(payloadSize)
-		err := csvwriter.Write([]string{strconv.FormatInt(payloadSize, 10), strconv.FormatInt(e2eTime, 10), strconv.FormatInt(expectedLatency, 10), strconv.FormatInt(commTime, 10), strconv.FormatInt(creationTime, 10), strconv.FormatInt(sleepTime, 10)})
+		e2eTime, targetTime := ClientPut(payloadSize)
+		err := csvwriter.Write([]string{strconv.FormatInt(payloadSize, 10), strconv.FormatInt(e2eTime, 10), strconv.FormatInt(targetTime, 10)})
 		if err != nil {
 			log.Fatalf("could not write to CSV file: %v", err)
 		}
 		csvwriter.Flush()
 	}
 	csvFile.Close()
-}
-
-func main() {
-	BenchmarkClientPut()
 }

@@ -11,7 +11,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	pb "mocks3/proto"
+	pb "github.com/JooyoungPark73/mocks3/proto"
 
 	"google.golang.org/grpc"
 )
@@ -21,11 +21,9 @@ type server struct {
 }
 
 var (
-	port            = flag.String("port", "30000", "the port to listen on")
-	verbosity       = flag.String("verbosity", "info", "Logging verbosity - choose from [info, debug, trace]")
-	latency         = flag.String("latency", "true", "Whether to have latency, true by default")
-	useCreationTime = flag.String("useCreationTime", "true", "Whether to use creation time, true by default")
-	buffer          = make([]byte, 512*1024*1024) // 512MB
+	port      = flag.String("port", "30000", "the port to listen on")
+	verbosity = flag.String("verbosity", "info", "Logging verbosity - choose from [info, debug, trace]")
+	buffer    = make([]byte, 512*1024*1024) // 512MB
 )
 
 func (s *server) GetTimeToSleep(commType string, fileSize int64) time.Duration {
@@ -47,65 +45,24 @@ func (s *server) GetTimeToSleep(commType string, fileSize int64) time.Duration {
 }
 
 func (s *server) GetFile(ctx context.Context, in *pb.FileSize) (*pb.FileBlob, error) {
-	// Wait based on file size
-	arrivalTime := time.Now().UnixMilli()
-
 	// Generate random blob
 	size := in.GetSize()
 	log.Debugf("Received a request for blob of size: %f KB", float64(size)/1024)
 	blob := buffer[:size]
-	creationTime := time.Duration(time.Now().UnixMilli()-arrivalTime) * time.Millisecond
-	timeToSleep := 0 * time.Millisecond
-	sleepTime := 0 * time.Millisecond
 
-	if *latency == "true" {
-		timeToSleep = s.GetTimeToSleep("GET", size)
-		log.Debugf("Sleeping for %v", timeToSleep)
-		if *useCreationTime == "true" {
-			creationTime = time.Duration(time.Now().UnixMilli()-arrivalTime) * time.Millisecond
-			sleepTime = timeToSleep - creationTime
-		} else {
-			sleepTime = timeToSleep
-		}
-		log.Debugf("Creation Time : %v, Net Sleeping for %v", creationTime, sleepTime)
-		time.Sleep(sleepTime)
-	}
-
-	return &pb.FileBlob{Blob: blob, ExpectedLatency: timeToSleep.Milliseconds(), SleepTime: sleepTime.Milliseconds(), CreationTime: creationTime.Milliseconds()}, nil
+	return &pb.FileBlob{Blob: blob}, nil
 }
 
 func (s *server) PutFile(ctx context.Context, in *pb.FileBlob) (*pb.FileSize, error) {
 	// Wait
-	arrivalTime := time.Now().UnixMilli()
 	size := int64(len(in.GetBlob()))
 	log.Debugf("Received a file blob of size: %f KB", float64(size)/1024)
-	timeToSleep := 0 * time.Millisecond
-	sleepTime := 0 * time.Millisecond
 
-	if *latency == "true" {
-		timeToSleep = s.GetTimeToSleep("PUT", size)
-		log.Debugf("sleeping for %v", timeToSleep)
-		if *useCreationTime == "true" {
-			sleepTime = timeToSleep - time.Duration(in.GetCreationTime())*time.Millisecond - time.Duration(time.Now().UnixMilli()-arrivalTime)*time.Millisecond
-		} else {
-			sleepTime = timeToSleep
-		}
-
-		log.Debugf("Net Sleeping for %v", sleepTime)
-		time.Sleep(sleepTime)
-	}
-
-	return &pb.FileSize{Size: size, ExpectedLatency: timeToSleep.Milliseconds(), SleepTime: sleepTime.Milliseconds()}, nil
+	return &pb.FileSize{Size: size}, nil
 }
 
 func init() {
 	flag.Parse()
-
-	if *latency == "true" {
-		log.Info("Latency is enabled")
-	} else {
-		log.Info("Latency is disabled")
-	}
 
 	log.SetFormatter(&log.TextFormatter{
 		TimestampFormat: time.StampMilli,
