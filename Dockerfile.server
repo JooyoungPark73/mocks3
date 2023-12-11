@@ -1,7 +1,7 @@
 # Stage 0: Build #
 # Use the official Golang image to create a build artifact.
 # This is based on Debian and sets the GOPATH to /go.
-FROM golang:1.19 as BUILDER
+FROM golang:1.21.5 as BUILDER
 
 # Create and change to the app directory.
 WORKDIR /app
@@ -27,8 +27,8 @@ FROM debian:stable-slim
 
 ARG FUNC_PORT
 ENV FUNC_PORT_ENV=${FUNC_PORT}
-ARG FUNC_LATENCY
-ENV FUNC_LATENCY_ENV=${FUNC_LATENCY}
+ARG FUNC_VERBOSE
+ENV FUNC_VERBOSE_ENV=${FUNC_VERBOSE}
 
 EXPOSE ${FUNC_PORT_ENV}
 
@@ -36,4 +36,4 @@ EXPOSE ${FUNC_PORT_ENV}
 COPY --from=BUILDER /app/server/server /server
 
 # Run the web service on container startup.
-CMD /server --port ${FUNC_PORT_ENV} --latency ${FUNC_LATENCY_ENV}
+CMD /server --port ${FUNC_PORT_ENV} --verbosity ${FUNC_VERBOSE_ENV}

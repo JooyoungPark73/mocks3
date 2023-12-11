@@ -9,8 +9,9 @@ import (
 )
 
 var (
-	Addr      = flag.String("addr", "localhost:30000", "the address to connect to")
-	Verbosity = flag.String("verbosity", "info", "Logging verbosity - choose from [info, debug, trace]")
+	Addr          = flag.String("addr", "localhost:30000", "the address to connect to")
+	Verbosity     = flag.String("verbosity", "info", "Logging verbosity - choose from [info, debug, trace]")
+	TestIteration = flag.Int("iteration", 100, "Number of iterations to run")
 )
 
 func GetTimeToSleep(commType string, fileSize int64) time.Duration {

@@ -3,7 +3,7 @@
 build:
 	docker build \
 		--build-arg FUNC_PORT=30000 \
-		--build-arg FUNC_LATENCY=true \
+		--build-arg FUNC_VERBOSE_ENV=debug \
 		-f Dockerfile.server \
 		-t nehalem90/mocks3_server .
 		docker push nehalem90/mocks3_server:latest

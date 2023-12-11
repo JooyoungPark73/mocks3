@@ -42,9 +42,16 @@ func ClientPut(size int64) (int64, int64) {
 	sendTime := time.Now().UnixMicro()
 	targetTime := utils.GetTimeToSleep("GET", size)
 
+	// get server address from environment variable
+	var serverAddress string
+	if _, ok := os.LookupEnv("MOCKS3_SERVER_ADDRESS"); ok {
+		serverAddress = os.Getenv("MOCKS3_SERVER_ADDRESS")
+	} else {
+		serverAddress = *utils.Addr
+	}
 	// gRPC Connection
 	maxMsgSize := int(math.Pow(2, 29)) // 1GB
-	conn, err := grpc.Dial(*utils.Addr, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(maxMsgSize), grpc.MaxCallSendMsgSize(maxMsgSize)))
+	conn, err := grpc.Dial(serverAddress, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(maxMsgSize), grpc.MaxCallSendMsgSize(maxMsgSize)))
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
 	}
@@ -74,7 +81,7 @@ func ClientPut(size int64) (int64, int64) {
 	return e2eTime / 1000, targetTime.Milliseconds()
 }
 
-func BenchmarkClientPut() {
+func BenchmarkClientPut(testIteration int) {
 	// Setup any required resources (like a mock server)
 	csvFile, err := os.Create("put_benchmark.csv")
 	if err != nil {
@@ -87,7 +94,7 @@ func BenchmarkClientPut() {
 		log.Fatalf("could not write to CSV file: %v", err)
 	}
 
-	for i := 0; i < 100; i++ {
+	for i := 0; i < testIteration; i++ {
 		randNumber := rand.Float64() * 29
 		payloadSize := int64(math.Pow(2, randNumber))
 		e2eTime, targetTime := ClientPut(payloadSize)
