@@ -99,7 +99,7 @@ func BenchmarkClientPut(testIteration int) {
 	for i := 0; i < testIteration; i++ {
 		randNumber := rand.Float64() * 29
 		payloadSize := int64(math.Pow(2, randNumber))
-		e2eTime, targetTime := ClientPut(payloadSize)
+		e2eTime, targetTime := ClientPut(payloadSize, "none")
 		err := csvwriter.Write([]string{strconv.FormatInt(payloadSize, 10), strconv.FormatInt(e2eTime, 10), strconv.FormatInt(targetTime, 10)})
 		if err != nil {
 			log.Fatalf("could not write to CSV file: %v", err)
