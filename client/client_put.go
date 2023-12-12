@@ -38,13 +38,15 @@ func init() {
 	}
 }
 
-func ClientPut(size int64) (int64, int64) {
+func ClientPut(size int64, addr string) (int64, int64) {
 	sendTime := time.Now().UnixMicro()
 	targetTime := utils.GetTimeToSleep("GET", size)
 
 	// get server address from environment variable
 	var serverAddress string
-	if _, ok := os.LookupEnv("MOCKS3_SERVER_ADDRESS"); ok {
+	if addr != "none" {
+		serverAddress = addr
+	} else if _, ok := os.LookupEnv("MOCKS3_SERVER_ADDRESS"); ok {
 		serverAddress = os.Getenv("MOCKS3_SERVER_ADDRESS")
 	} else {
 		serverAddress = *utils.Addr

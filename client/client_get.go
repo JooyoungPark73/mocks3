@@ -38,13 +38,15 @@ func init() {
 	}
 }
 
-func ClientGet(size int64) (int64, int64) {
+func ClientGet(size int64, addr string) (int64, int64) {
 	sendTime := time.Now().UnixMicro()
 	targetTime := utils.GetTimeToSleep("GET", size)
 
 	// get server address from environment variable
 	var serverAddress string
-	if _, ok := os.LookupEnv("MOCKS3_SERVER_ADDRESS"); ok {
+	if addr != "none" {
+		serverAddress = addr
+	} else if _, ok := os.LookupEnv("MOCKS3_SERVER_ADDRESS"); ok {
 		serverAddress = os.Getenv("MOCKS3_SERVER_ADDRESS")
 	} else {
 		serverAddress = *utils.Addr
@@ -97,7 +99,7 @@ func BenchmarkClientGet(testIteration int) {
 	for i := 0; i < testIteration; i++ {
 		randNumber := rand.Float64() * 29
 		payloadSize := int64(math.Pow(2, randNumber))
-		e2eTime, targetTime := ClientGet(payloadSize)
+		e2eTime, targetTime := ClientGet(payloadSize, "none")
 		err := csvwriter.Write([]string{strconv.FormatInt(payloadSize, 10), strconv.FormatInt(e2eTime, 10), strconv.FormatInt(targetTime, 10)})
 		if err != nil {
 			log.Fatalf("could not write to CSV file: %v", err)

@@ -36,4 +36,4 @@ EXPOSE ${FUNC_PORT_ENV}
 COPY --from=BUILDER /app/server/server /server
 
 # Run the web service on container startup.
-CMD /server --port ${FUNC_PORT_ENV} --verbosity ${FUNC_VERBOSE_ENV}
+CMD /server -port ${FUNC_PORT_ENV} -verbosity ${FUNC_VERBOSE_ENV}
