@@ -36,8 +36,8 @@ func init() {
 }
 
 func ClientGet(size int64, addr string) (int64, int64) {
-	sendTime := time.Now().UnixMicro()
-	targetTime := utils.GetTimeToSleep("GET", size)
+	start := time.Now()
+	targetTime := utils.GetTimeToSleep("GET", size).Microseconds()
 
 	// get server address from environment variable
 	var serverAddress string
@@ -58,10 +58,11 @@ func ClientGet(size int64, addr string) (int64, int64) {
 	c := pb.NewFileServiceClient(conn)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
+	GRPCConnectionEstablishTime := time.Since(start).Microseconds()
 
 	// Send the request
 	r, err := c.GetFile(ctx, &pb.FileSize{Size: size})
-	commTime := time.Now().UnixMicro() - sendTime
+	commTime := time.Since(start).Microseconds() - GRPCConnectionEstablishTime
 	if err != nil {
 		if err == context.DeadlineExceeded {
 			// handle the timeout
@@ -70,12 +71,12 @@ func ClientGet(size int64, addr string) (int64, int64) {
 			log.Fatalf("could not get file: %v", err)
 		}
 	}
-	log.Debugf("Received a file blob of size: %d", len(r.GetBlob()))
+	log.Debugf("Received blob size: %d Bytes, commTime: %d us", len(r.GetBlob()), commTime)
 
-	timeToSleep := targetTime - time.Duration(commTime)*time.Microsecond
+	timeToSleep := time.Duration(targetTime-time.Since(start).Microseconds()) * time.Microsecond
 	time.Sleep(timeToSleep)
-	log.Debugf("Time to sleep: %d ms, net sleep: %d ms", targetTime.Milliseconds(), timeToSleep.Milliseconds())
-	e2eTime := time.Now().UnixMicro() - sendTime
+	log.Debugf("Time to sleep: %d us, net sleep: %d us", targetTime, timeToSleep.Microseconds())
+	e2eTime := time.Since(start).Microseconds()
 
-	return e2eTime / 1000, targetTime.Milliseconds()
+	return e2eTime, targetTime
 }

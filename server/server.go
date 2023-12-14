@@ -31,23 +31,23 @@ func (s *server) GetTimeToSleep(commType string, fileSize int64) time.Duration {
 	// [  0.12018868   1.11999534 111.24820149]
 	// a * np.exp(b * np.log10(x_point)) + c
 
-	latencyPower := 0.12018868*math.Exp(1.11999534*math.Log10(float64(fileSize))) + 111.24820149
+	latency := 120.18868*math.Exp(1.11999534*math.Log10(float64(fileSize))) + 111248.20149
 
 	if commType == "GET" {
-		latencyPower = latencyPower * 0.67
+		latency = latency * 0.67
 	} else if commType == "PUT" {
-		latencyPower = latencyPower * 1.33
+		latency = latency * 1.33
 	} else {
 		log.Panic("Invalid communication type")
 	}
-	sleepTime := time.Duration(latencyPower) * time.Millisecond
+	sleepTime := time.Duration(latency) * time.Microsecond
 	return sleepTime
 }
 
 func (s *server) GetFile(ctx context.Context, in *pb.FileSize) (*pb.FileBlob, error) {
 	// Generate random blob
 	size := in.GetSize()
-	log.Debugf("Received a request for blob of size: %f KB", float64(size)/1024)
+	log.Debugf("GET: %d Bytes", size)
 	blob := buffer[:size]
 
 	return &pb.FileBlob{Blob: blob}, nil
@@ -56,7 +56,7 @@ func (s *server) GetFile(ctx context.Context, in *pb.FileSize) (*pb.FileBlob, er
 func (s *server) PutFile(ctx context.Context, in *pb.FileBlob) (*pb.FileSize, error) {
 	// Wait
 	size := int64(len(in.GetBlob()))
-	log.Debugf("Received a file blob of size: %f KB", float64(size)/1024)
+	log.Debugf("PUT: %d Bytes", size)
 
 	return &pb.FileSize{Size: size}, nil
 }
