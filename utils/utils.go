@@ -19,7 +19,7 @@ func GetTimeToSleep(commType string, fileSize int64) time.Duration {
 	// [  0.12018868   1.11999534 111.24820149]
 	// a * np.exp(b * np.log10(x_point)) + c
 
-	latencyPower := 0.12018868*math.Exp(1.11999534*math.Log10(float64(fileSize))) + 111.24820149
+	latencyPower := 120.18868*math.Exp(1.11999534*math.Log10(float64(fileSize))) + 111248.20149
 
 	if commType == "GET" {
 		latencyPower = latencyPower * 0.67
@@ -28,7 +28,7 @@ func GetTimeToSleep(commType string, fileSize int64) time.Duration {
 	} else {
 		log.Panic("Invalid communication type")
 	}
-	sleepTime := time.Duration(latencyPower) * time.Millisecond
+	sleepTime := time.Duration(latencyPower) * time.Microsecond
 	return sleepTime
 }
 

@@ -37,7 +37,7 @@ func init() {
 
 func ClientPut(size int64, addr string) (int64, int64) {
 	start := time.Now()
-	targetTime := utils.GetTimeToSleep("GET", size).Microseconds()
+	targetTime := utils.GetTimeToSleep("PUT", size).Microseconds()
 
 	// get server address from environment variable
 	var serverAddress string
