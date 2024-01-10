@@ -18,7 +18,7 @@ func BenchmarkClientGet(testIteration int) {
 	}
 	csvwriter := csv.NewWriter(csvFile)
 	defer csvwriter.Flush()
-	err = csvwriter.Write([]string{"Payload Size (Bytes)", "E2E Time (ms)", "Target Time (ms)"})
+	err = csvwriter.Write([]string{"Payload Size (Bytes)", "E2E Time (us)", "Target Time (us)"})
 	if err != nil {
 		log.Fatalf("could not write to CSV file: %v", err)
 	}
@@ -45,7 +45,7 @@ func BenchmarkClientPut(testIteration int) {
 	}
 	csvwriter := csv.NewWriter(csvFile)
 	defer csvwriter.Flush()
-	err = csvwriter.Write([]string{"Payload Size (Bytes)", "E2E Time (ms)", "Target Time (ms)"})
+	err = csvwriter.Write([]string{"Payload Size (Bytes)", "E2E Time (us)", "Target Time (us)"})
 	if err != nil {
 		log.Fatalf("could not write to CSV file: %v", err)
 	}

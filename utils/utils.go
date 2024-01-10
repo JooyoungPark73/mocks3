@@ -22,9 +22,9 @@ func GetTimeToSleep(commType string, fileSize int64) time.Duration {
 	latencyPower := 120.18868*math.Exp(1.11999534*math.Log10(float64(fileSize))) + 111248.20149
 
 	if commType == "GET" {
-		latencyPower = latencyPower * 0.67
+		latencyPower = latencyPower * 0.33
 	} else if commType == "PUT" {
-		latencyPower = latencyPower * 1.33
+		latencyPower = latencyPower * 0.67
 	} else {
 		log.Panic("Invalid communication type")
 	}
