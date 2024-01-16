@@ -23,7 +23,7 @@ type server struct {
 var (
 	port      = flag.String("port", "30000", "the port to listen on")
 	verbosity = flag.String("verbosity", "info", "Logging verbosity - choose from [info, debug, trace]")
-	buffer    = make([]byte, 512*1024*1024) // 512MB
+	buffer    = make([]byte, 2049*1024*1024) // 2048MB
 )
 
 func (s *server) GetTimeToSleep(commType string, fileSize int64) time.Duration {
@@ -82,7 +82,7 @@ func init() {
 }
 
 func main() {
-	maxMsgSize := int(math.Pow(2, 29)) // 512MB
+	maxMsgSize := int(math.Pow(2, 31) + 1024) // 2GB
 	lis, err := net.Listen("tcp", ":"+*port)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
