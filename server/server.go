@@ -82,7 +82,7 @@ func init() {
 }
 
 func main() {
-	maxMsgSize := int(math.Pow(2, 29)) // 512MB
+	maxMsgSize := int(math.Pow(2, 31)) // 2GB
 	lis, err := net.Listen("tcp", ":"+*port)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)

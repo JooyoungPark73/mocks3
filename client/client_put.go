@@ -49,7 +49,7 @@ func ClientPut(size int64, addr string) (int64, int64) {
 		serverAddress = *utils.Addr
 	}
 	// gRPC Connection
-	maxMsgSize := int(math.Pow(2, 29)) // 512MB
+	maxMsgSize := int(math.Pow(2, 31)) // 2GB
 	conn, err := grpc.Dial(serverAddress, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(maxMsgSize), grpc.MaxCallSendMsgSize(maxMsgSize)))
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
