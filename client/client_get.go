@@ -3,7 +3,7 @@ package mocks3
 import (
 	"context"
 	"flag"
-	"math"
+	"io"
 	"os"
 	"time"
 
@@ -48,30 +48,38 @@ func ClientGet(size int64, addr string) (int64, int64) {
 	} else {
 		serverAddress = *utils.Addr
 	}
+
 	// gRPC Connection
-	maxMsgSize := int(math.Pow(2, 31) + 1024) // 2GB
-	conn, err := grpc.Dial(serverAddress, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(maxMsgSize), grpc.MaxCallSendMsgSize(maxMsgSize)))
+	conn, err := grpc.Dial(serverAddress, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
 	}
 	defer conn.Close()
 	c := pb.NewFileServiceClient(conn)
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
 	GRPCConnectionEstablishTime := time.Since(start).Microseconds()
+	log.Debugf("GRPC Connection Time: %d us", GRPCConnectionEstablishTime)
 
 	// Send the request
-	r, err := c.GetFile(ctx, &pb.FileSize{Size: size})
-	commTime := time.Since(start).Microseconds() - GRPCConnectionEstablishTime
+	stream, err := c.GetFile(context.Background(), &pb.FileSize{Size: size})
 	if err != nil {
-		if err == context.DeadlineExceeded {
-			// handle the timeout
-			log.Fatalf("request timed out: %v", err)
-		} else {
-			log.Fatalf("could not get file: %v", err)
+		log.Fatalf("client.GetFile Cannot send request size: %v", err)
+	}
+	recv_size := int64(0)
+	for {
+		chunk, err := stream.Recv()
+		recv_size += int64(len(chunk.GetBlob()))
+		// log.Debugf("GET: recvd %d / %d Bytes \r", recv_size, size)
+		if err == io.EOF {
+			log.Debugf("GET: %d Bytes", recv_size)
+			break
+		}
+		if err != nil {
+			log.Fatalf("could not get file from stream: %v", err)
 		}
 	}
-	log.Debugf("Received blob size: %d Bytes, commTime: %d us", len(r.GetBlob()), commTime)
+	commTime := time.Since(start).Microseconds() - GRPCConnectionEstablishTime
+
+	log.Debugf("Received blob size: %d Bytes, commTime: %d us", recv_size, commTime)
 
 	timeToSleep := time.Duration(targetTime-time.Since(start).Microseconds()) * time.Microsecond
 	time.Sleep(timeToSleep)

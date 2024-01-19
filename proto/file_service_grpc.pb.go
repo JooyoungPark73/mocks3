@@ -22,8 +22,8 @@ const _ = grpc.SupportPackageIsVersion7
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type FileServiceClient interface {
-	GetFile(ctx context.Context, in *FileSize, opts ...grpc.CallOption) (*FileBlob, error)
-	PutFile(ctx context.Context, in *FileBlob, opts ...grpc.CallOption) (*FileSize, error)
+	GetFile(ctx context.Context, in *FileSize, opts ...grpc.CallOption) (FileService_GetFileClient, error)
+	PutFile(ctx context.Context, opts ...grpc.CallOption) (FileService_PutFileClient, error)
 }
 
 type fileServiceClient struct {
@@ -34,30 +34,78 @@ func NewFileServiceClient(cc grpc.ClientConnInterface) FileServiceClient {
 	return &fileServiceClient{cc}
 }
 
-func (c *fileServiceClient) GetFile(ctx context.Context, in *FileSize, opts ...grpc.CallOption) (*FileBlob, error) {
-	out := new(FileBlob)
-	err := c.cc.Invoke(ctx, "/proto.FileService/GetFile", in, out, opts...)
+func (c *fileServiceClient) GetFile(ctx context.Context, in *FileSize, opts ...grpc.CallOption) (FileService_GetFileClient, error) {
+	stream, err := c.cc.NewStream(ctx, &FileService_ServiceDesc.Streams[0], "/proto.FileService/GetFile", opts...)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	x := &fileServiceGetFileClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
 }
 
-func (c *fileServiceClient) PutFile(ctx context.Context, in *FileBlob, opts ...grpc.CallOption) (*FileSize, error) {
-	out := new(FileSize)
-	err := c.cc.Invoke(ctx, "/proto.FileService/PutFile", in, out, opts...)
+type FileService_GetFileClient interface {
+	Recv() (*FileBlob, error)
+	grpc.ClientStream
+}
+
+type fileServiceGetFileClient struct {
+	grpc.ClientStream
+}
+
+func (x *fileServiceGetFileClient) Recv() (*FileBlob, error) {
+	m := new(FileBlob)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (c *fileServiceClient) PutFile(ctx context.Context, opts ...grpc.CallOption) (FileService_PutFileClient, error) {
+	stream, err := c.cc.NewStream(ctx, &FileService_ServiceDesc.Streams[1], "/proto.FileService/PutFile", opts...)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	x := &fileServicePutFileClient{stream}
+	return x, nil
+}
+
+type FileService_PutFileClient interface {
+	Send(*FileBlob) error
+	CloseAndRecv() (*FileSize, error)
+	grpc.ClientStream
+}
+
+type fileServicePutFileClient struct {
+	grpc.ClientStream
+}
+
+func (x *fileServicePutFileClient) Send(m *FileBlob) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *fileServicePutFileClient) CloseAndRecv() (*FileSize, error) {
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	m := new(FileSize)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 // FileServiceServer is the server API for FileService service.
 // All implementations must embed UnimplementedFileServiceServer
 // for forward compatibility
 type FileServiceServer interface {
-	GetFile(context.Context, *FileSize) (*FileBlob, error)
-	PutFile(context.Context, *FileBlob) (*FileSize, error)
+	GetFile(*FileSize, FileService_GetFileServer) error
+	PutFile(FileService_PutFileServer) error
 	mustEmbedUnimplementedFileServiceServer()
 }
 
@@ -65,11 +113,11 @@ type FileServiceServer interface {
 type UnimplementedFileServiceServer struct {
 }
 
-func (UnimplementedFileServiceServer) GetFile(context.Context, *FileSize) (*FileBlob, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetFile not implemented")
+func (UnimplementedFileServiceServer) GetFile(*FileSize, FileService_GetFileServer) error {
+	return status.Errorf(codes.Unimplemented, "method GetFile not implemented")
 }
-func (UnimplementedFileServiceServer) PutFile(context.Context, *FileBlob) (*FileSize, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method PutFile not implemented")
+func (UnimplementedFileServiceServer) PutFile(FileService_PutFileServer) error {
+	return status.Errorf(codes.Unimplemented, "method PutFile not implemented")
 }
 func (UnimplementedFileServiceServer) mustEmbedUnimplementedFileServiceServer() {}
 
@@ -84,40 +132,51 @@ func RegisterFileServiceServer(s grpc.ServiceRegistrar, srv FileServiceServer) {
 	s.RegisterService(&FileService_ServiceDesc, srv)
 }
 
-func _FileService_GetFile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(FileSize)
-	if err := dec(in); err != nil {
-		return nil, err
+func _FileService_GetFile_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(FileSize)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
 	}
-	if interceptor == nil {
-		return srv.(FileServiceServer).GetFile(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/proto.FileService/GetFile",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(FileServiceServer).GetFile(ctx, req.(*FileSize))
-	}
-	return interceptor(ctx, in, info, handler)
+	return srv.(FileServiceServer).GetFile(m, &fileServiceGetFileServer{stream})
 }
 
-func _FileService_PutFile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(FileBlob)
-	if err := dec(in); err != nil {
+type FileService_GetFileServer interface {
+	Send(*FileBlob) error
+	grpc.ServerStream
+}
+
+type fileServiceGetFileServer struct {
+	grpc.ServerStream
+}
+
+func (x *fileServiceGetFileServer) Send(m *FileBlob) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func _FileService_PutFile_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(FileServiceServer).PutFile(&fileServicePutFileServer{stream})
+}
+
+type FileService_PutFileServer interface {
+	SendAndClose(*FileSize) error
+	Recv() (*FileBlob, error)
+	grpc.ServerStream
+}
+
+type fileServicePutFileServer struct {
+	grpc.ServerStream
+}
+
+func (x *fileServicePutFileServer) SendAndClose(m *FileSize) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *fileServicePutFileServer) Recv() (*FileBlob, error) {
+	m := new(FileBlob)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
-	if interceptor == nil {
-		return srv.(FileServiceServer).PutFile(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/proto.FileService/PutFile",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(FileServiceServer).PutFile(ctx, req.(*FileBlob))
-	}
-	return interceptor(ctx, in, info, handler)
+	return m, nil
 }
 
 // FileService_ServiceDesc is the grpc.ServiceDesc for FileService service.
@@ -126,16 +185,18 @@ func _FileService_PutFile_Handler(srv interface{}, ctx context.Context, dec func
 var FileService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "proto.FileService",
 	HandlerType: (*FileServiceServer)(nil),
-	Methods: []grpc.MethodDesc{
+	Methods:     []grpc.MethodDesc{},
+	Streams: []grpc.StreamDesc{
 		{
-			MethodName: "GetFile",
-			Handler:    _FileService_GetFile_Handler,
+			StreamName:    "GetFile",
+			Handler:       _FileService_GetFile_Handler,
+			ServerStreams: true,
 		},
 		{
-			MethodName: "PutFile",
-			Handler:    _FileService_PutFile_Handler,
+			StreamName:    "PutFile",
+			Handler:       _FileService_PutFile_Handler,
+			ClientStreams: true,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
 	Metadata: "proto/file_service.proto",
 }

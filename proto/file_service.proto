@@ -5,8 +5,8 @@ package proto;
 option go_package = "./mocks3";
 
 service FileService {
-    rpc GetFile (FileSize) returns (FileBlob) {}
-    rpc PutFile (FileBlob) returns (FileSize) {}
+    rpc GetFile (FileSize) returns (stream FileBlob) {}
+    rpc PutFile (stream FileBlob) returns (FileSize) {}
 }
 
 message FileSize {

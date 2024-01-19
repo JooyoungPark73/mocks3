@@ -1,9 +1,9 @@
 package main
 
 import (
-	"context"
 	"crypto/rand"
 	"flag"
+	"io"
 	"math"
 	"net"
 	"os"
@@ -23,7 +23,7 @@ type server struct {
 var (
 	port      = flag.String("port", "30000", "the port to listen on")
 	verbosity = flag.String("verbosity", "info", "Logging verbosity - choose from [info, debug, trace]")
-	buffer    = make([]byte, 2049*1024*1024) // 2048MB
+	buffer    = make([]byte, 2*1024*1024) // 2MB
 )
 
 func (s *server) GetTimeToSleep(commType string, fileSize int64) time.Duration {
@@ -44,21 +44,40 @@ func (s *server) GetTimeToSleep(commType string, fileSize int64) time.Duration {
 	return sleepTime
 }
 
-func (s *server) GetFile(ctx context.Context, in *pb.FileSize) (*pb.FileBlob, error) {
-	// Generate random blob
-	size := in.GetSize()
-	log.Debugf("GET: %d Bytes", size)
-	blob := buffer[:size]
+func (s *server) GetFile(req *pb.FileSize, stream pb.FileService_GetFileServer) error {
+	size := req.GetSize()
 
-	return &pb.FileBlob{Blob: blob}, nil
+	log.Debugf("GET: %d Bytes", size)
+
+	for remaining := size; remaining > 0; remaining -= int64(len(buffer)) {
+		chunk := buffer
+		if remaining < int64(len(buffer)) {
+			chunk = buffer[:remaining]
+		}
+		if err := stream.Send(&pb.FileBlob{Blob: chunk}); err != nil {
+			if err == io.EOF {
+				break
+			}
+			return err
+		}
+	}
+
+	return nil
 }
 
-func (s *server) PutFile(ctx context.Context, in *pb.FileBlob) (*pb.FileSize, error) {
-	// Wait
-	size := int64(len(in.GetBlob()))
-	log.Debugf("PUT: %d Bytes", size)
-
-	return &pb.FileSize{Size: size}, nil
+func (s *server) PutFile(stream pb.FileService_PutFileServer) error {
+	size := int64(0)
+	for {
+		chunk, err := stream.Recv()
+		size += int64(len(chunk.GetBlob()))
+		if err == io.EOF {
+			log.Debugf("PUT: %d Bytes", size)
+			return stream.SendAndClose(&pb.FileSize{Size: size})
+		}
+		if err != nil {
+			return err
+		}
+	}
 }
 
 func init() {
@@ -82,15 +101,12 @@ func init() {
 }
 
 func main() {
-	maxMsgSize := int(math.Pow(2, 31) + 1024) // 2GB
+	// maxMsgSize := int(math.Pow(2, 31) + 1024) // 2GB
 	lis, err := net.Listen("tcp", ":"+*port)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
-	s := grpc.NewServer(
-		grpc.MaxRecvMsgSize(maxMsgSize),
-		grpc.MaxSendMsgSize(maxMsgSize),
-	)
+	s := grpc.NewServer()
 	pb.RegisterFileServiceServer(s, &server{})
 	log.Infof("server listening at %v", lis.Addr())
 	if err := s.Serve(lis); err != nil {
